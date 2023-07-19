@@ -132,7 +132,7 @@ export function json_to_file(path: string, data: any, callback?: (error: any) =>
   })
 }
 
-export function str_to_file(path: string, data: string, callback?: (error: any) => void){
+export function str_to_file(path: string, data: string, callback?: (error: any) => void, options?: {disableLog: boolean}){
   fs.writeFile(path, data, (err) => {
     if(err){
       console.log(`Failed to export data to ${path}, error: ${err.message}`.red);
@@ -140,7 +140,10 @@ export function str_to_file(path: string, data: string, callback?: (error: any) 
       return;
     }
   
-    console.log(`Wrote to ${path}`.green);
+    if(!options || !options.disableLog){
+      console.log(`Wrote to ${path}`.green);
+    }
+    
     callback && callback(null);
   })
 }

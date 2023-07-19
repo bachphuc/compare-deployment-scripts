@@ -12,7 +12,7 @@ const folderPath = __dirname
 const sourcePath = `${folderPath}/data/source.sql`;
 const targetPath = `${folderPath}/data/target.sql`;
 const now = new Date();
-const strDate = `${now.getDate() > 9 ? now.getDate() : '0' + now.getDate()}/${now.getMonth() + 1 > 9 ? now.getMonth() + 1 : '0' + (now.getMonth())}/${now.getFullYear()} ${now.getHours() > 9 ? now.getHours() : '0' + now.getHours()}:${now.getMinutes() > 9 ? now.getMinutes() : '0' + now .getMinutes()}:${now.getSeconds() > 9 ? now.getSeconds() : '0' + now.getSeconds()}`
+const strDate = `${now.getDate() > 9 ? now.getDate() : '0' + now.getDate()}/${now.getMonth() + 1 > 9 ? now.getMonth() + 1 : '0' + (now.getMonth())}/${now.getFullYear()} ${now.getHours() > 9 ? now.getHours() : '0' + now.getHours()}:${now.getMinutes() > 9 ? now.getMinutes() : '0' + now .getMinutes()}:${now.getSeconds() > 9 ? now.getSeconds() : '0' + now.getSeconds()}`;
 const outputPath = `${folderPath}/output/${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 
 main();
@@ -42,6 +42,16 @@ function main(){
     log_error(`Failed to parse target stores. STOP`);
     return;
   }
+
+  dir_create(`${folderPath}/output`);
+  dir_create_and_empty(outputPath);
+  dir_create_and_empty(`${outputPath}/detail/`);
+  dir_create_and_empty(`${outputPath}/detail/source/`);
+  dir_create_and_empty(`${outputPath}/detail/target/`);
+  // dir_create_and_empty(`${outputPath}/detail/all/`);
+  // dir_create_and_empty(`${outputPath}/detail/new/`);
+  // dir_create_and_empty(`${outputPath}/detail/modify/`);
+  // dir_create_and_empty(`${outputPath}/detail/have-target-missing-source/`);
   
   const newStores: SQLStore[] = [];
   const modifyStores: SQLStore[] = [];
@@ -57,6 +67,7 @@ function main(){
     else{
       // Check if this store is modified
       if(!compare_store(source.content, target.content)){
+        source.targetContent = target.content;
         modifyStores.push(source);
         log_warn(`Modify store: ${source.name}`)
       }
@@ -75,23 +86,14 @@ function main(){
   
   log_success(`RESULT: Total source stores=${sourceStores.length}, target stores=${targetStores.length}. New stores: ${newStores.length}, modify stores=${modifyStores.length}. ${missingSourceStores.length ? `Store in target without source=${missingSourceStores.length}` : ''}`)
 
-  dir_create(`${folderPath}/output`);
-  dir_create_and_empty(outputPath);
-  dir_create_and_empty(`${outputPath}/detail/`);
-  dir_create_and_empty(`${outputPath}/detail/all/`);
-  dir_create_and_empty(`${outputPath}/detail/new/`);
-  dir_create_and_empty(`${outputPath}/detail/modify/`);
-  dir_create_and_empty(`${outputPath}/detail/have-target-missing-source/`);
-
   const updateStores: SQLStore[] = [...modifyStores, ...newStores];
   const all: SQLStore[] = [...modifyStores, ...newStores, ...missingSourceStores];
 
   // Write sql bundle
   const sqlBundleUpdate = updateStores.map(e => `
-/****** Object:  StoredProcedure [dbo].[${e.name}]    Script Date: ${strDate} ******/
 ${e.content}
   `.trim()).join("\n\n");
-  str_to_file(`${outputPath}/new_and_modify_bundle.sql`, sqlBundleUpdate);
+  str_to_file(`${outputPath}/change_bundle.sql`, sqlBundleUpdate);
 
   // Check topics
   const topics: string[] = [];
@@ -114,46 +116,63 @@ ${e.content}
         // Write file
         stores.forEach(store => {
           const path = `${outputPath}/topics/${topic}/${store.name}.sql`;
-          str_to_file(path, store.content || '');
+          str_to_file(path, store.content || '', undefined, {disableLog: true});
         })
       }
     })
   }
   
   // Write files 
-  if(all.length){
-    all.forEach(store => {
-      const path = `${outputPath}/detail/all/${store.name}.sql`;
-      str_to_file(path, store.content || '');
+  if(updateStores.length){
+    updateStores.forEach(store => {
+      const path = `${outputPath}/detail/source/${store.name}.sql`;
+      str_to_file(path, store.content || '', undefined, {disableLog: true});
+
+      if(store.targetContent){
+        str_to_file(`${outputPath}/detail/target/${store.name}.sql`, store.targetContent || '', undefined, {disableLog: true});
+      }
     })
   }
 
-  if(modifyStores.length){
-    modifyStores.forEach(store => {
-      const path = `${outputPath}/detail/modify/${store.name}.sql`;
-      str_to_file(path, store.content || '');
-    })
-  }
+  // if(all.length){
+  //   all.forEach(store => {
+  //     const path = `${outputPath}/detail/all/${store.name}.sql`;
+  //     str_to_file(path, store.content || '');
+  //   })
+  // }
 
-  if(newStores.length){
-    newStores.forEach(store => {
-      const path = `${outputPath}/detail/new/${store.name}.sql`;
-      str_to_file(path, store.content || '');
-    })
-  }
+  // if(modifyStores.length){
+  //   modifyStores.forEach(store => {
+  //     const path = `${outputPath}/detail/modify/${store.name}.sql`;
+  //     str_to_file(path, store.content || '');
+  //   })
+  // }
+
+  // if(newStores.length){
+  //   newStores.forEach(store => {
+  //     const path = `${outputPath}/detail/new/${store.name}.sql`;
+  //     str_to_file(path, store.content || '');
+  //   })
+  // }
 
   if(missingSourceStores.length){
     missingSourceStores.forEach(store => {
       const path = `${outputPath}/detail/have-target-missing-source/${store.name}.sql`;
-      str_to_file(path, store.content || '');
+      // str_to_file(path, store.content || '');
+
+      str_to_file(`${outputPath}/detail/target/${store.name}.sql`, store.content || '', undefined, {disableLog: true});
     })
   }
   
   writeLog();
+  setTimeout(() => {
+    console.log(`Files are stored in: ${outputPath}`.yellow);
+    console.log(`================================ FINISHED ================================`)
 
-  console.log(`================================================================`)
-
-  
+    setTimeout(() => {
+    
+    }, 5000);
+  }, 3000);
 }
 
 function writeLog(){

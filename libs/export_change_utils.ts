@@ -1,6 +1,9 @@
 import { SQLStore } from "./interface";
 import { log_add, log_error, log_warn } from "./log";
 
+const now = new Date();
+const strNow = `${now.getDate() > 9 ? now.getDate() : '0' + now.getDate()}/${now.getMonth() + 1 > 9 ? now.getMonth() + 1 : '0' + (now.getMonth())}/${now.getFullYear()} ${now.getHours() > 9 ? now.getHours() : '0' + now.getHours()}:${now.getMinutes() > 9 ? now.getMinutes() : '0' + now .getMinutes()}:${now.getSeconds() > 9 ? now.getSeconds() : '0' + now.getSeconds()}`;
+
 export function extract_stores(content: string): SQLStore[]{
   const reg = /\/\*\*\*\*\*\* Object:\s*StoredProcedure\s*\[dbo\]\.\[[a-z0-9_\- ]+\]\s*Script\s+Date:\s*\d+\/\d+\/\d+\s*\d+:\d+:\d+\s*\*\*\*\*\*\*\//i;
 
@@ -15,7 +18,7 @@ export function extract_stores(content: string): SQLStore[]{
   const stores: SQLStore[] = [];
 
   parts.forEach((part, i) => {
-    const store = parse_store(part);
+    const store = parse_store(part, content);
     if(store){
       stores.push(store);
     }
@@ -67,7 +70,7 @@ function parse_store_topics(name: string, content: string): string[] | undefined
   return results;
 }
 
-function parse_store(content: string): SQLStore | undefined{
+function parse_store(content: string, fullContent: string): SQLStore | undefined{
   if(!content) {
     log_error(`parse_store: content is empty`)
     return;
@@ -86,20 +89,36 @@ function parse_store(content: string): SQLStore | undefined{
 
   // log_warn(`parse_store name: ${storeName}`);
 
+  // const strDate = parse_store_date(storeName, fullContent);
   const storeContent = build_store(storeName, content);
   const topics = parse_store_topics(storeName, content);
 
   const result: SQLStore = {
     name: storeName,
     content: storeContent,
-    topics: topics
+    topics: topics,
+    // date: strDate
   };
 
   return result;
 }
 
-function build_store(name: string, content: string){
+function parse_store_date(name: string, content: string): string{
+  // 19/06/2023 08:59:34
+  const reg = new RegExp(`StoredProcedure\\s+\\[dbo\\]\\.\\[${name}\\]\\s+Script\\s+Date:\\s*(\\d{2}\\/\\d{2}\\/\\d{4}\\s+\\d{2}:\\d{2}:\\d{2})`);
+  if(!reg.test(content)) {
+    log_add(`Failed to parse date`)
+    return '';
+  }
+
+  const match = reg.exec(content);
+  if(!match) return '';
+  return match[1];
+}
+
+function build_store(name: string, content: string, date?: string){
   let result = `
+/****** Object:  StoredProcedure [dbo].[${name}]    Script Date: ${strNow} ******/
 IF exists (SELECT * FROM dbo.sysobjects WHERE id = object_id(N'[dbo].[${name}]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
 DROP procedure [dbo].[${name}]
 GO
