@@ -1,15 +1,20 @@
-import { SQLStore } from "./interface";
+import { SQLStore, SQLStoreType } from "./interface";
 import { log_add, log_error, log_warn } from "./log";
+import { json_to_file } from "./utils/excel-utils";
 
 const now = new Date();
 const strNow = `${now.getDate() > 9 ? now.getDate() : '0' + now.getDate()}/${now.getMonth() + 1 > 9 ? now.getMonth() + 1 : '0' + (now.getMonth())}/${now.getFullYear()} ${now.getHours() > 9 ? now.getHours() : '0' + now.getHours()}:${now.getMinutes() > 9 ? now.getMinutes() : '0' + now .getMinutes()}:${now.getSeconds() > 9 ? now.getSeconds() : '0' + now.getSeconds()}`;
 
 export function extract_stores(content: string): SQLStore[]{
-  const reg = /\/\*\*\*\*\*\* Object:\s*StoredProcedure\s*\[dbo\]\.\[[a-z0-9_\- ]+\]\s*Script\s+Date:\s*\d+\/\d+\/\d+\s*\d+:\d+:\d+\s*\*\*\*\*\*\*\//i;
+  const reg = /\/\*\*\*\*\*\* Object:\s*(StoredProcedure|UserDefinedFunction)\s*\[dbo\]\.\[[a-z0-9_\- ]+\]\s*Script\s+Date:\s*\d+\/\d+\/\d+\s*\d+:\d+:\d+\s*\*\*\*\*\*\*\//i;
 
   log_add(`extract_stores content length: ${content.length}`);
 
-  const parts: string[] = content.split(reg);
+  const parts: string[] = content.split(reg).filter(e => 
+    e.toLowerCase() !== 'storedprocedure' && 
+    e.toLowerCase() !== 'userdefinedfunction'
+  );
+
   if(!parts.length){
     log_error(`extract_stores: Failed to split`)
     return []
@@ -27,8 +32,8 @@ export function extract_stores(content: string): SQLStore[]{
   return stores;
 }
 
-function parse_store_name(content: string): string | null{
-  const reg = /^\s*CREATE\s+PROCEDURE\s+\[dbo\]\.\[([a-z0-9_\- ]+)\]/im;
+function parse_store_name(content: string): SQLStore | null{
+  const reg = /^\s*CREATE\s+(PROCEDURE|FUNCTION)\s+\[dbo\]\.\[([a-z0-9_\- ]+)\]/im;
 
   if(!reg.test(content)) {
     log_add(`parse_store_name failed parse name`)
@@ -40,7 +45,10 @@ function parse_store_name(content: string): string | null{
     log_error(`parse_store_name: Match is null.`)
     return null;
   }
-  return match[1].trim();
+  return {
+    type: match[1].trim().toLowerCase() as SQLStoreType,
+    name: match[2].trim()
+  }
 }
 
 function parse_store_topics(name: string, content: string): string[] | undefined{
@@ -87,17 +95,14 @@ function parse_store(content: string, fullContent: string): SQLStore | undefined
     return;
   }
 
-  // log_warn(`parse_store name: ${storeName}`);
-
-  // const strDate = parse_store_date(storeName, fullContent);
   const storeContent = build_store(storeName, content);
-  const topics = parse_store_topics(storeName, content);
+  const topics = parse_store_topics(storeName.name, content);
 
   const result: SQLStore = {
-    name: storeName,
+    name: storeName.name,
+    type: storeName.type,
     content: storeContent,
     topics: topics,
-    // date: strDate
   };
 
   return result;
@@ -116,11 +121,13 @@ function parse_store_date(name: string, content: string): string{
   return match[1];
 }
 
-function build_store(name: string, content: string, date?: string){
+function build_store(store: SQLStore, content: string, date?: string){
+  const name = store.name;
+
   let result = `
-/****** Object:  StoredProcedure [dbo].[${name}]    Script Date: ${strNow} ******/
-IF exists (SELECT * FROM dbo.sysobjects WHERE id = object_id(N'[dbo].[${name}]') and OBJECTPROPERTY(id, N'IsProcedure') = 1)
-DROP procedure [dbo].[${name}]
+/****** Object:  ${store.type == 'function' ? 'UserDefinedFunction' : 'StoredProcedure'} [dbo].[${name}]    Script Date: ${strNow} ******/
+IF exists (SELECT * FROM dbo.sysobjects WHERE id = object_id(N'[dbo].[${name}]') and OBJECTPROPERTY(id, N'${store.type == 'function' ? 'IsScalarFunction': 'IsProcedure'}') = 1)
+DROP ${store.type === 'function' ? 'FUNCTION' : 'PROCEDURE'} [dbo].[${name}]
 GO
 
 ${content}
@@ -129,7 +136,10 @@ ${content}
   return result.trim();
 }
 
-export function compare_store(str1: string, str2: string): boolean{
+export function compare_store(str1?: string, str2?: string): boolean{
+  if(str1 === undefined || str2 === undefined) return true;
+  if(!str1 && str2) return true;
+  if(str1 && !str2) return true;
   // Deep compare
   const s1 = str1.replace(/\s+/g, ' ').trim();
   const s2 = str2.replace(/\s+/g, ' ').trim();
