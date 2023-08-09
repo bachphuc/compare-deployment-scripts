@@ -103,6 +103,7 @@ function parse_store(content: string, fullContent: string): SQLStore | undefined
     type: storeName.type,
     content: storeContent,
     topics: topics,
+    isTest: is_test_store(storeName.name)
   };
 
   return result;
@@ -145,4 +146,8 @@ export function compare_store(str1?: string, str2?: string): boolean{
   const s2 = str2.replace(/\s+/g, ' ').trim();
   const result = s1 === s2;
   return result;
+}
+
+export function is_test_store(name: string): boolean{
+  return /_test$/i.test(name);
 }

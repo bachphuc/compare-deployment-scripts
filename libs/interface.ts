@@ -6,5 +6,6 @@ export interface SQLStore{
   topics?: string[],
   targetContent?: string,
   date?: string,
-  type?: SQLStoreType
+  type?: SQLStoreType,
+  isTest?: boolean
 }

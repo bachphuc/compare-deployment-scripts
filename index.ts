@@ -30,18 +30,22 @@ function main(){
     return;
   }
   
-  const sourceStores = extract_stores(strSource);
-  if(!sourceStores.length) {
+  const inputSourceStores = extract_stores(strSource);
+  if(!inputSourceStores.length) {
     log_error(`Failed to parse source stores. STOP`);
     return;
   }
 
-  const targetStores = extract_stores(strTarget);
+  const sourceStores = inputSourceStores.filter(e => !e.isTest);
 
-  if(!targetStores.length) {
+  const inputTargetStores = extract_stores(strTarget);
+
+  if(!inputTargetStores.length) {
     log_error(`Failed to parse target stores. STOP`);
     return;
   }
+
+  const targetStores = inputTargetStores.filter(e => !e.isTest);
 
   dir_create(`${folderPath}/output`);
   dir_create_and_empty(outputPath);
