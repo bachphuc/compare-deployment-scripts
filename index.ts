@@ -5,6 +5,7 @@ import { dir_create, dir_create_and_empty, json_to_file, str_to_file, text_from_
 import { compare_store, extract_stores } from "./libs/export_change_utils";
 import { log_all, log_error, log_success, log_warn } from './libs/log';
 import { SQLStore } from './libs/interface';
+import { EXCLUDE_STORES_NAME } from './exclude_stores';
 
 colors.enable();
 
@@ -36,7 +37,7 @@ function main(){
     return;
   }
 
-  const sourceStores = inputSourceStores.filter(e => !e.isTest);
+  const sourceStores = inputSourceStores.filter(e => !e.isTest).filter(e => EXCLUDE_STORES_NAME.indexOf(e.name) === -1);
 
   const inputTargetStores = extract_stores(strTarget);
 
@@ -45,7 +46,7 @@ function main(){
     return;
   }
 
-  const targetStores = inputTargetStores.filter(e => !e.isTest);
+  const targetStores = inputTargetStores.filter(e => !e.isTest).filter(e => EXCLUDE_STORES_NAME.indexOf(e.name) === -1);
 
   dir_create(`${folderPath}/output`);
   dir_create_and_empty(outputPath);
